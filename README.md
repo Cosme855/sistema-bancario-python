@@ -18,6 +18,7 @@ Sistema bancário desenvolvido em Python com foco em boas práticas de programa�
 2. Clone este repositório:
    ```bash
    git clone https://github.com/Cosme855/sistema-bancario-python.git
-3. Abra à pasta do projeto e execute o script pelo terminal: "python operacao_b2.py"
+3. abra o arquivo : operacao_b2.py
+ou Abra à pasta do projeto por um IDE python e execute o script pelo terminal: "python operacao_b2.py"
 
 Aproveita a experiencia, qualquer atualização estaremos informando durante o processo.
