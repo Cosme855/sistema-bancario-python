@@ -1,0 +1,22 @@
+{
+    "utilizadores": [
+        {
+            "nome": "Silvio Cosme",
+            "data_nascimento": "24/09/1997",
+            "cpf_hash": "cd69d1283203b011bcf8fe8a591a314024b608e75075408e955a0047d0d40691",
+            "endereco": "Rua Silva Jardim  - Vila São Luiz - Duque de Caxias RJ"
+        }
+    ],
+    "contas": [
+        {
+            "agencia": "0001",
+            "numero_conta": 1,
+            "cpf_titular_hash": "cd69d1283203b011bcf8fe8a591a314024b608e75075408e955a0047d0d40691",
+            "senha_hash": "03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4",
+            "saldo": 7000.0,
+            "limite": 3000.0,
+            "extrato": "Depósito:\tR$ 10000.00\nSaque:\t\tR$ 3000.00\n",
+            "numero_saques": 1
+        }
+    ]
+}
