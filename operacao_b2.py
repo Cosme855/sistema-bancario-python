@@ -6,19 +6,29 @@ import textwrap
 import json
 import os
 import hashlib
+from datetime import datetime
 
 ARQUIVO_DADOS = "dados_banco.json"
 
 def carregar_dados():
     """
     Carrega os dados dos utilizadores e contas a partir do ficheiro JSON,
-    garantindo a persistência segura das informações.
+    garantindo a persistência e atualizando contas antigas automaticamente (migração).
     """
     if os.path.exists(ARQUIVO_DADOS):
         try:
             with open(ARQUIVO_DADOS, "r", encoding="utf-8") as arquivo:
                 dados = json.load(arquivo)
-                return dados.get("utilizadores", []), dados.get("contas", [])
+                utilizadores = dados.get("utilizadores", [])
+                contas = dados.get("contas", [])
+                
+                # 🛡️ MIGRAÇÃO AUTOMÁTICA: Garante que clientes antigos ganhem 
+                # os novos campos sem perder os dados anteriores.
+                for conta in contas:
+                    if "historico_transacoes_datas" not in conta:
+                        conta["historico_transacoes_datas"] = []
+                        
+                return utilizadores, contas
         except json.JSONDecodeError:
             print("\n⚠️ Aviso: Ficheiro de dados corrompido ou vazio. A iniciar com base limpa.")
             return [], []
@@ -62,13 +72,45 @@ def obter_valor_numerico(mensagem):
         except ValueError:
             print("\n❌ Erro de formato: Por favor, informe apenas números válidos.")
 
+def verificar_limite_transacoes(conta):
+    """
+    Verifica se a conta já atingiu o limite de 10 transações no dia atual.
+    """
+    hoje = datetime.now().strftime("%Y-%m-%d")
+    # Conta quantas transações foram feitas na data de hoje
+    transacoes_hoje = [t for t in conta.get("historico_transacoes_datas", []) if t.startswith(hoje)]
+    
+    if len(transacoes_hoje) >= 10:
+        return True # Excedeu o limite
+    return False
+
+def registar_transacao(conta, tipo, valor):
+    """
+    Regista a data, hora e tipo da transação para controlo diário e exibição no extrato.
+    """
+    agora = datetime.now()
+    data_hora_str = agora.strftime("%d/%m/%Y %H:%M:%S")
+    data_iso_str = agora.strftime("%Y-%m-%d %H:%M:%S")
+    
+    # Adiciona ao histórico de datas para validação do limite diário
+    if "historico_transacoes_datas" not in conta:
+        conta["historico_transacoes_datas"] = []
+    conta["historico_transacoes_datas"].append(data_iso_str)
+    
+    # Adiciona a linha formatada ao extrato
+    conta["extrato"] += f"[{data_hora_str}] {tipo}:\tR$ {valor:.2f}\n"
+
 def depositar(conta, valor, utilizadores, contas):
     """
-    Realiza a operação de depósito com validação de valor positivo.
+    Realiza a operação de depósito validando o valor e o limite diário de transações.
     """
+    if verificar_limite_transacoes(conta):
+        print("\n❌ Operação falhou! Excedeu o número máximo de 10 transações permitidas para hoje.")
+        return
+
     if valor > 0:
         conta["saldo"] += valor
-        conta["extrato"] += f"Depósito:\tR$ {valor:.2f}\n"
+        registar_transacao(conta, "Depósito", valor)
         salvar_dados(utilizadores, contas)
         print(f"\n✅ Depósito de R$ {valor:.2f} realizado com sucesso!")
     else:
@@ -76,8 +118,12 @@ def depositar(conta, valor, utilizadores, contas):
 
 def sacar(*, conta, valor, limite, limite_saques, utilizadores, contas):
     """
-    Realiza a operação de saque aplicando regras de segurança financeira.
+    Realiza o saque aplicando regras financeiras, de limite de saques e limite diário de transações.
     """
+    if verificar_limite_transacoes(conta):
+        print("\n❌ Operação falhou! Excedeu o número máximo de 10 transações permitidas para hoje.")
+        return
+
     excedeu_saldo = valor > conta["saldo"]
     excedeu_limite = valor > limite
     excedeu_saques = conta["numero_saques"] >= limite_saques
@@ -90,8 +136,8 @@ def sacar(*, conta, valor, limite, limite_saques, utilizadores, contas):
         print("\n❌ Operação falhou! Número máximo de saques diários atingido.")
     elif valor > 0:
         conta["saldo"] -= valor
-        conta["extrato"] += f"Saque:\t\tR$ {valor:.2f}\n"
         conta["numero_saques"] += 1
+        registar_transacao(conta, "Saque", valor)
         salvar_dados(utilizadores, contas)
         print(f"\n✅ Saque de R$ {valor:.2f} realizado com sucesso!")
     else:
@@ -212,7 +258,7 @@ def main():
     """
     Função principal que gere o ciclo de vida da aplicação com menus blindados.
     """
-    LIMITE_SAQUES = 4
+    LIMITE_SAQUES = 5
     AGENCIA = "0001"
     
     utilizadores, contas = carregar_dados()
@@ -221,7 +267,7 @@ def main():
         menu_inicial = """
         ================ ACESSO BANCÁRIO  ================
         [1]\tAutenticar com CPF e Senha (Login)
-        [2]\tCriar Nova Conta / Utilizador Blindado
+        [2]\tCriar Nova Conta 
         [q]\tSair do Sistema
         => """
         
