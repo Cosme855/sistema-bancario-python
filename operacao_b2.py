@@ -1,5 +1,5 @@
 """
-Sistema Bancário em Python 
+Sistema Bancário em Python - Versão 0.3 para contas corrente e salário.
 """
 
 import textwrap
@@ -22,11 +22,15 @@ def carregar_dados():
                 utilizadores = dados.get("utilizadores", [])
                 contas = dados.get("contas", [])
                 
-                # 🛡️ MIGRAÇÃO AUTOMÁTICA: Garante que clientes antigos ganhem 
-                # os novos campos sem perder os dados anteriores.
+                # Migração automática para garantir compatibilidade com versões anteriores
+                
                 for conta in contas:
                     if "historico_transacoes_datas" not in conta:
                         conta["historico_transacoes_datas"] = []
+                    if "tipo_conta" not in conta:
+                        conta["tipo_conta"] = "corrente"
+                    if "limite" not in conta or conta["limite"] <= 0.0:
+                        conta["limite"] = 5000.0 if conta.get("tipo_conta") == "corrente" else 2500.0
                         
                 return utilizadores, contas
         except json.JSONDecodeError:
@@ -47,14 +51,13 @@ def salvar_dados(utilizadores, contas):
 
 def criar_hash(texto):
     """
-    Segurança Avançada (Hash): Converte qualquer dado sensível (CPF ou Senha) 
-    num código criptografado irreversível (SHA-256).
+    Segurança Avançada (Hash): Converte dados sensíveis num código criptografado (SHA-256).
     """
     return hashlib.sha256(texto.encode()).hexdigest()
 
 def formatar_e_mascarar_cpf(cpf):
     """
-    Privacidade Visual: Formata o CPF no padrão xxx.xxx.xxx-xx e oculta os dígitos centrais na tela.
+    Privacidade Visual: Formata o CPF e oculta os dígitos centrais na tela.
     """
     apenas_digitos = "".join([c for c in cpf if c.isdigit()])
     if len(apenas_digitos) == 11:
@@ -63,7 +66,7 @@ def formatar_e_mascarar_cpf(cpf):
 
 def obter_valor_numerico(mensagem):
     """
-    Robustez: Garante que o programa não quebre se forem inseridas letras em vez de números.
+    Garante que o programa não quebre se forem inseridas letras.
     """
     while True:
         try:
@@ -77,11 +80,10 @@ def verificar_limite_transacoes(conta):
     Verifica se a conta já atingiu o limite de 10 transações no dia atual.
     """
     hoje = datetime.now().strftime("%Y-%m-%d")
-    # Conta quantas transações foram feitas na data de hoje
     transacoes_hoje = [t for t in conta.get("historico_transacoes_datas", []) if t.startswith(hoje)]
     
     if len(transacoes_hoje) >= 10:
-        return True # Excedeu o limite
+        return True
     return False
 
 def registar_transacao(conta, tipo, valor):
@@ -92,12 +94,10 @@ def registar_transacao(conta, tipo, valor):
     data_hora_str = agora.strftime("%d/%m/%Y %H:%M:%S")
     data_iso_str = agora.strftime("%Y-%m-%d %H:%M:%S")
     
-    # Adiciona ao histórico de datas para validação do limite diário
     if "historico_transacoes_datas" not in conta:
         conta["historico_transacoes_datas"] = []
     conta["historico_transacoes_datas"].append(data_iso_str)
     
-    # Adiciona a linha formatada ao extrato
     conta["extrato"] += f"[{data_hora_str}] {tipo}:\tR$ {valor:.2f}\n"
 
 def depositar(conta, valor, utilizadores, contas):
@@ -118,7 +118,7 @@ def depositar(conta, valor, utilizadores, contas):
 
 def sacar(*, conta, valor, limite, limite_saques, utilizadores, contas):
     """
-    Realiza o saque aplicando regras financeiras, de limite de saques e limite diário de transações.
+    Realiza o saque aplicando regras financeiras, limite de saques e limite diário.
     """
     if verificar_limite_transacoes(conta):
         print("\n❌ Operação falhou! Excedeu o número máximo de 10 transações permitidas para hoje.")
@@ -145,119 +145,172 @@ def sacar(*, conta, valor, limite, limite_saques, utilizadores, contas):
 
 def exibir_extrato(conta):
     """
-    Exibe o extrato detalhado de transações da conta autenticada.
+    Exibe o extrato detalhado com data, hora, tipo de conta e saldo atual.
     """
-    print("\n================ EXTRATO ================")
+    tipo_nome = "Conta Salário" if conta.get("tipo_conta") == "salario" else "Conta Corrente"
+    print(f"\n================ EXTRATO ({tipo_nome}) ================")
     print("Não foram realizadas movimentações." if not conta["extrato"] else conta["extrato"])
     print(f"\nSaldo atual:\tR$ {conta['saldo']:.2f}")
-    print("==========================================")
+    print("======================================================")
 
-def criar_utilizador_e_conta(utilizadores, contas, agencia):
+def criar_utilizador(utilizadores, contas):
     """
-    Cadastra um novo utilizador validando o CPF, evitando duplicados por hash,
-    recolhendo morada e criando credenciais totalmente criptografadas.
+    Cadastra apenas o perfil do utilizador (Cliente) com segurança Hash no CPF.
     """
-    cpf_input = input("Informe o CPF (apenas números ou com pontuação): ")
+    cpf_input = input("Informe o CPF do cliente (apenas números): ")
     cpf_limpo = "".join([c for c in cpf_input if c.isdigit()])
     
     if len(cpf_limpo) != 11:
         print("\n❌ Segurança: CPF inválido! Deve conter exatamente 11 dígitos.")
         return None
     
-    # Gera o hash do CPF para verificação segura
     cpf_hash_novo = criar_hash(cpf_limpo)
 
-    # Verifica se já existe um utilizador registado com este CPF
     for u in utilizadores:
         if u["cpf_hash"] == cpf_hash_novo:
             print("\n❌ Operação negada: Já existe um utilizador registado com este CPF!")
-            return None
+            return u
 
     nome = input("Informe o nome completo: ")
     data_nascimento = input("Informe a data de nascimento (dd-mm-aaaa): ")
-    
-    while True:
-        senha = input("Crie uma palavra-passe/PIN numérico de 4 dígitos para a sua conta: ")
-        if senha.isdigit() and len(senha) == 4:
-            break
-        print("\n❌ A senha deve conter exatamente 4 números.")
 
     print("\n--- Dados do Endereço ---")
     rua = input("Informe a rua: ")
     bairro = input("Informe o bairro: ")
     cidade_estado = input("Informe a cidade/sigla estado (ex: Rio de Janeiro/RJ): ")
-    
     endereco = f"{rua} - {bairro} - {cidade_estado}"
 
     utilizador = {
         "nome": nome, 
         "data_nascimento": data_nascimento, 
-        "cpf_hash": cpf_hash_novo, # O CPF fica guardado exclusivamente em formato Hash
+        "cpf_hash": cpf_hash_novo,
         "endereco": endereco
     }
     utilizadores.append(utilizador)
+    salvar_dados(utilizadores, contas)
+    
+    print(f"\n🎉 Utilizador cadastrado com sucesso!")
+    print(f"🛡️ CPF Protegido (Hash): {formatar_e_mascarar_cpf(cpf_limpo)}")
+    return utilizador
+
+def criar_nova_conta(utilizadores, contas, agencia):
+    """
+    Cria uma nova conta (Corrente ou Salário) vinculada a um utilizador existente,
+    definindo limites financeiros adequados para cada tipo.
+    """
+    if not utilizadores:
+        print("\n❌ Nenhum utilizador cadastrado. Cadastre o utilizador primeiro (Opção 2).")
+        return None
+
+    cpf_input = input("Informe o CPF do titular para vincular a conta: ")
+    cpf_limpo = "".join([c for c in cpf_input if c.isdigit()])
+    cpf_hash_busca = criar_hash(cpf_limpo)
+
+    utilizador_encontrado = None
+    for u in utilizadores:
+        if u["cpf_hash"] == cpf_hash_busca:
+            utilizador_encontrado = u
+            break
+
+    if not utilizador_encontrado:
+        print("\n❌ Utilizador não encontrado! Por favor, cadastre o utilizador primeiro.")
+        return None
+
+    print("\n--- Selecione o Tipo de Conta ---")
+    print("[1] Conta Corrente (Limite de saque: R$ 5000.00)")
+    print("[2] Conta Salário (Limite de saque: R$ 2500.00)")
+    tipo_opcao = input("Escolha o tipo (1 ou 2): ").strip()
+    
+    tipo_conta = "salario" if tipo_opcao == "2" else "corrente"
+    nome_tipo = "Conta Salário" if tipo_conta == "salario" else "Conta Corrente"
+    
+    # 🛡️ Correção: Atribui limites válidos para evitar o bloqueio indevido
+    limite_conta = 5000.0 if tipo_conta == "corrente" else 2500.0
+
+    while True:
+        senha = input("Crie uma palavra-passe/PIN numérico de 4 dígitos para esta conta: ")
+        if senha.isdigit() and len(senha) == 4:
+            break
+        print("\n❌ A senha deve conter exatamente 4 números.")
 
     numero_conta = len(contas) + 1
     conta = {
         "agencia": agencia,
         "numero_conta": numero_conta,
-        "cpf_titular_hash": cpf_hash_novo, # Relacionamento da conta feito via Hash do CPF
+        "tipo_conta": tipo_conta,
+        "cpf_titular_hash": cpf_hash_busca,
         "senha_hash": criar_hash(senha),
         "saldo": 0.0,
-        "limite": 3000.0,
+        "limite": limite_conta, # Limite de saque por operação corrigido
         "extrato": "",
-        "numero_saques": 0
+        "numero_saques": 0,
+        "historico_transacoes_datas": []
     }
     contas.append(conta)
-    
     salvar_dados(utilizadores, contas)
-    
-    print(f"\n🎉 Conta e Utilizador Criados com Segurança Máxima!")
-    print(f"📄 Agência: {agencia} | Conta Corrente: {numero_conta}")
-    print(f"🛡️ CPF Registrado (Protegido na Ecrã): {formatar_e_mascarar_cpf(cpf_limpo)}")
-    print(f"🔒 Tanto o CPF quanto a palavra-passe foram criptografados no disco.")
-    print(f"🏠 Endereço: {endereco}")
+
+    print(f"\n🎉 {nome_tipo} criada com sucesso!")
+    print(f"📄 Agência: {agencia} | Número da Conta: {numero_conta} | Limite por Saque: R$ {limite_conta:.2f}")
     return conta
 
 def autenticar_usuario(contas, utilizadores):
     """
-    Autenticação Ultra-Segura: Converte o CPF e a senha informados em hash
-    e valida a correspondência exata no sistema.
+    Autenticação segura via hash de CPF e palavra-passe. 
+    Se o cliente tiver múltiplas contas, exibe um menu para escolher qual deseja aceder.
     """
     cpf_input = input("Informe o seu CPF para autenticação: ")
     cpf_limpo = "".join([c for c in cpf_input if c.isdigit()])
     cpf_hash_tentativa = criar_hash(cpf_limpo)
     
-    conta_encontrada = None
-    for conta in contas:
-        if conta["cpf_titular_hash"] == cpf_hash_tentativa:
-            conta_encontrada = conta
-            break
-                
-    if conta_encontrada:
-        senha_input = input("Informe a sua palavra-passe/PIN de 4 dígitos: ")
-        senha_hash_tentativa = criar_hash(senha_input)
-        
-        if senha_hash_tentativa == conta_encontrada["senha_hash"]:
-            nome_titular = ""
-            for u in utilizadores:
-                if u["cpf_hash"] == cpf_hash_tentativa:
-                    nome_titular = u["nome"]
-                    break
-                        
-            print(f"\n✨ Autenticação bem-sucedida! Bem-vindo(a) de volta, {nome_titular}.")
-            return conta_encontrada
-        else:
-            print("\n❌ Acesso Negado: Palavra-passe incorreta.")
-            return None
-    else:
-        print("\n❌ Acesso Negado: CPF não encontrado.")
+    contas_do_usuario = [c for c in contas if c["cpf_titular_hash"] == cpf_hash_tentativa]
+    
+    if not contas_do_usuario:
+        print("\n❌ Acesso Negado: Nenhuma conta encontrada para este CPF.")
         return None
+        
+    senha_input = input("Informe a sua palavra-passe/PIN de 4 dígitos: ")
+    senha_hash_tentativa = criar_hash(senha_input)
+    
+    contas_validas = [c for c in contas_do_usuario if c["senha_hash"] == senha_hash_tentativa]
+    
+    if not contas_validas:
+        print("\n❌ Acesso Negado: Palavra-passe incorreta.")
+        return None
+        
+    nome_titular = ""
+    for u in utilizadores:
+        if u["cpf_hash"] == cpf_hash_tentativa:
+            nome_titular = u["nome"]
+            break
+            
+    if len(contas_validas) == 1:
+        conta_encontrada = contas_validas[0]
+        tipo_nome = "Conta Salário" if conta_encontrada.get("tipo_conta") == "salario" else "Conta Corrente"
+        print(f"\n✨ Autenticação bem-sucedida! Bem-vindo(a), {nome_titular} ({tipo_nome} - C/C: {conta_encontrada['numero_conta']}).")
+        return conta_encontrada
+        
+    print(f"\n✨ Olá, {nome_titular}! Encontramos mais do que uma conta associada ao seu CPF[cite: 20].")
+    print("=" * 50)
+    print("Selecione qual conta deseja aceder:")
+    
+    for idx, conta in enumerate(contas_validas, start=1):
+        tipo_nome = "Conta Salário" if conta.get("tipo_conta") == "salario" else "Conta Corrente"
+        print(f"[{idx}]\t{tipo_nome} (Ag: {conta['agencia']} | C/C: {conta['numero_conta']} | Saldo: R$ {conta['saldo']:.2f})")
+        
+    print("=" * 50)
+    
+    while True:
+        escolha = input("Digite o número da conta desejada: ").strip()
+        if escolha.isdigit():
+            indice = int(escolha) - 1
+            if 0 <= indice < len(contas_validas):
+                conta_escolhida = contas_validas[indice]
+                tipo_nome = "Conta Salário" if conta_escolhida.get("tipo_conta") == "salario" else "Conta Corrente"
+                print(f"\n✅ Acedendo à {tipo_nome} (C/C: {conta_escolhida['numero_conta']})...")
+                return conta_escolhida
+        print("❌ Opção inválida. Digite um número correspondente à lista.")
 
 def main():
-    """
-    Função principal que gere o ciclo de vida da aplicação com menus blindados.
-    """
     LIMITE_SAQUES = 5
     AGENCIA = "0001"
     
@@ -266,8 +319,9 @@ def main():
     while True:
         menu_inicial = """
         ================ ACESSO BANCÁRIO  ================
-        [1]\tAutenticar com CPF e Senha (Login)
-        [2]\tCriar Nova Conta 
+        [1]\tAcessar à Conta
+        [2]\tCadastrar Novo Utilizador 
+        [3]\tCriar Nova Conta (Corrente ou Salário)
         [q]\tSair do Sistema
         => """
         
@@ -278,8 +332,9 @@ def main():
             
             if conta_atual:
                 while True:
+                    tipo_nome = "Salário" if conta_atual.get("tipo_conta") == "salario" else "Corrente"
                     menu_operacoes = f"""
-                    ================ MENU DA CONTA (Ag: {conta_atual['agencia']} | C/C: {conta_atual['numero_conta']}) ================
+                    ================ MENU ({tipo_nome} - Ag: {conta_atual['agencia']} | C/C: {conta_atual['numero_conta']}) ================
                     [d]\tDepositar
                     [s]\tSacar
                     [e]\tExtrato
@@ -313,10 +368,13 @@ def main():
                         print("\n❌ Opção inválida, selecione novamente.")
 
         elif opcao == "2":
-            criar_utilizador_e_conta(utilizadores, contas, AGENCIA)
+            criar_utilizador(utilizadores, contas)
+
+        elif opcao == "3":
+            criar_nova_conta(utilizadores, contas, AGENCIA)
 
         elif opcao == "q":
-            print("\nObrigado por utilizar o nosso banco. Até logo!")
+            print("\nObrigado por utilizar o nosso sistema bancário. Até logo!")
             break
         else:
             print("\n❌ Opção inválida, selecione novamente.")
