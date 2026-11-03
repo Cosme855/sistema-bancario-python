@@ -1,0 +1,47 @@
+{
+    "clientes": [
+        {
+            "nome": "Silvio Cosme Araujo Rodrigues",
+            "data_nascimento": "24/09/1997",
+            "cpf_hash": "463222884392617ea340376783c428936fb6f5e93383822cc710bedfb4baf678",
+            "endereco": "R. Silva Jardim 1066 - vila são Luiz - Duque de Caxias Rj"
+        }
+    ],
+    "contas": [
+        {
+            "agencia": "0001",
+            "numero_conta": 1,
+            "tipo_conta": "corrente",
+            "cpf_titular_hash": "463222884392617ea340376783c428936fb6f5e93383822cc710bedfb4baf678",
+            "senha_hash": "03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4",
+            "saldo": 3000.0,
+            "limite": 5000.0,
+            "numero_saques": 1,
+            "historico": [
+                {
+                    "tipo": "Depósito",
+                    "valor": 8000.0,
+                    "data_iso": "2026-11-03 09:21:42",
+                    "data_formatada": "03/11/2026 09:21:42"
+                },
+                {
+                    "tipo": "Saque",
+                    "valor": 5000.0,
+                    "data_iso": "2026-11-03 09:21:55",
+                    "data_formatada": "03/11/2026 09:21:55"
+                }
+            ]
+        },
+        {
+            "agencia": "0001",
+            "numero_conta": 2,
+            "tipo_conta": "salario",
+            "cpf_titular_hash": "463222884392617ea340376783c428936fb6f5e93383822cc710bedfb4baf678",
+            "senha_hash": "03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4",
+            "saldo": 0.0,
+            "limite": 2500.0,
+            "numero_saques": 0,
+            "historico": []
+        }
+    ]
+}

@@ -1,73 +1,27 @@
-"""
-Sistema Bancário em Python - Versão 0.3 para contas corrente e salário.
-"""
+""" Sistema Bancário em Python  """
 
-import textwrap
+
 import json
 import os
 import hashlib
 from datetime import datetime
+from abc import ABC, abstractmethod
 
-ARQUIVO_DADOS = "dados_banco.json"
-
-def carregar_dados():
-    """
-    Carrega os dados dos utilizadores e contas a partir do ficheiro JSON,
-    garantindo a persistência e atualizando contas antigas automaticamente (migração).
-    """
-    if os.path.exists(ARQUIVO_DADOS):
-        try:
-            with open(ARQUIVO_DADOS, "r", encoding="utf-8") as arquivo:
-                dados = json.load(arquivo)
-                utilizadores = dados.get("utilizadores", [])
-                contas = dados.get("contas", [])
-                
-                # Migração automática para garantir compatibilidade com versões anteriores
-                
-                for conta in contas:
-                    if "historico_transacoes_datas" not in conta:
-                        conta["historico_transacoes_datas"] = []
-                    if "tipo_conta" not in conta:
-                        conta["tipo_conta"] = "corrente"
-                    if "limite" not in conta or conta["limite"] <= 0.0:
-                        conta["limite"] = 5000.0 if conta.get("tipo_conta") == "corrente" else 2500.0
-                        
-                return utilizadores, contas
-        except json.JSONDecodeError:
-            print("\n⚠️ Aviso: Ficheiro de dados corrompido ou vazio. A iniciar com base limpa.")
-            return [], []
-    return [], []
-
-def salvar_dados(utilizadores, contas):
-    """
-    Salva o estado atual das listas de utilizadores e contas no ficheiro JSON.
-    """
-    dados = {
-        "utilizadores": utilizadores,
-        "contas": contas
-    }
-    with open(ARQUIVO_DADOS, "w", encoding="utf-8") as arquivo:
-        json.dump(dados, arquivo, ensure_ascii=False, indent=4)
+ARQUIVO_DADOS = "dados_banco_poo.json"
 
 def criar_hash(texto):
-    """
-    Segurança Avançada (Hash): Converte dados sensíveis num código criptografado (SHA-256).
-    """
+    """Gera um hash SHA-256 para proteger dados sensíveis (CPFs e Pins)."""
     return hashlib.sha256(texto.encode()).hexdigest()
 
 def formatar_e_mascarar_cpf(cpf):
-    """
-    Privacidade Visual: Formata o CPF e oculta os dígitos centrais na tela.
-    """
+    """Privacidade Visual: Oculta os dígitos centrais do CPF no ecrã."""
     apenas_digitos = "".join([c for c in cpf if c.isdigit()])
     if len(apenas_digitos) == 11:
         return f"***.{apenas_digitos[3:6]}.{apenas_digitos[6:9]}-**"
     return "***.***.***-**"
 
 def obter_valor_numerico(mensagem):
-    """
-    Garante que o programa não quebre se forem inseridas letras.
-    """
+    """Garante que o programa não quebra se forem inseridas letras."""
     while True:
         try:
             valor = float(input(mensagem))
@@ -75,88 +29,269 @@ def obter_valor_numerico(mensagem):
         except ValueError:
             print("\n❌ Erro de formato: Por favor, informe apenas números válidos.")
 
-def verificar_limite_transacoes(conta):
-    """
-    Verifica se a conta já atingiu o limite de 10 transações no dia atual.
-    """
-    hoje = datetime.now().strftime("%Y-%m-%d")
-    transacoes_hoje = [t for t in conta.get("historico_transacoes_datas", []) if t.startswith(hoje)]
-    
-    if len(transacoes_hoje) >= 10:
-        return True
-    return False
 
-def registar_transacao(conta, tipo, valor):
-    """
-    Regista a data, hora e tipo da transação para controlo diário e exibição no extrato.
-    """
-    agora = datetime.now()
-    data_hora_str = agora.strftime("%d/%m/%Y %H:%M:%S")
-    data_iso_str = agora.strftime("%Y-%m-%d %H:%M:%S")
-    
-    if "historico_transacoes_datas" not in conta:
-        conta["historico_transacoes_datas"] = []
-    conta["historico_transacoes_datas"].append(data_iso_str)
-    
-    conta["extrato"] += f"[{data_hora_str}] {tipo}:\tR$ {valor:.2f}\n"
+class Historico:
+    def __init__(self):
+        self._transacoes = []
 
-def depositar(conta, valor, utilizadores, contas):
-    """
-    Realiza a operação de depósito validando o valor e o limite diário de transações.
-    """
-    if verificar_limite_transacoes(conta):
-        print("\n❌ Operação falhou! Excedeu o número máximo de 10 transações permitidas para hoje.")
-        return
+    @property
+    def transacoes(self):
+        return self._transacoes
 
-    if valor > 0:
-        conta["saldo"] += valor
-        registar_transacao(conta, "Depósito", valor)
-        salvar_dados(utilizadores, contas)
-        print(f"\n✅ Depósito de R$ {valor:.2f} realizado com sucesso!")
-    else:
-        print("\n❌ Operação falhou! O valor informado deve ser maior que zero.")
+    def adicionar_transacao(self, tipo, valor):
+        agora = datetime.now()
+        self._transacoes.append({
+            "tipo": tipo,
+            "valor": valor,
+            "data_iso": agora.strftime("%Y-%m-%d %H:%M:%S"),
+            "data_formatada": agora.strftime("%d/%m/%Y %H:%M:%S")
+        })
 
-def sacar(*, conta, valor, limite, limite_saques, utilizadores, contas):
-    """
-    Realiza o saque aplicando regras financeiras, limite de saques e limite diário.
-    """
-    if verificar_limite_transacoes(conta):
-        print("\n❌ Operação falhou! Excedeu o número máximo de 10 transações permitidas para hoje.")
-        return
 
-    excedeu_saldo = valor > conta["saldo"]
-    excedeu_limite = valor > limite
-    excedeu_saques = conta["numero_saques"] >= limite_saques
+class Transacao(ABC):
+    @property
+    @abstractmethod
+    def valor(self):
+        pass
 
-    if excedeu_saldo:
-        print("\n❌ Operação falhou! Saldo insuficiente.")
-    elif excedeu_limite:
-        print(f"\n❌ Operação falhou! O valor excede o limite máximo por saque de R$ {limite:.2f}.")
-    elif excedeu_saques:
-        print("\n❌ Operação falhou! Número máximo de saques diários atingido.")
-    elif valor > 0:
-        conta["saldo"] -= valor
-        conta["numero_saques"] += 1
-        registar_transacao(conta, "Saque", valor)
-        salvar_dados(utilizadores, contas)
-        print(f"\n✅ Saque de R$ {valor:.2f} realizado com sucesso!")
-    else:
-        print("\n❌ Operação falhou! O valor informado é inválido.")
+    @abstractmethod
+    def registrar(self, conta):
+        pass
 
-def exibir_extrato(conta):
-    """
-    Exibe o extrato detalhado com data, hora, tipo de conta e saldo atual.
-    """
-    tipo_nome = "Conta Salário" if conta.get("tipo_conta") == "salario" else "Conta Corrente"
-    print(f"\n================ EXTRATO ({tipo_nome}) ================")
-    print("Não foram realizadas movimentações." if not conta["extrato"] else conta["extrato"])
-    print(f"\nSaldo atual:\tR$ {conta['saldo']:.2f}")
-    print("======================================================")
 
-def criar_utilizador(utilizadores, contas):
-    """
-    Cadastra apenas o perfil do utilizador (Cliente) com segurança Hash no CPF.
-    """
+class Deposito(Transacao):
+    def __init__(self, valor):
+        self._valor = valor
+
+    @property
+    def valor(self):
+        return self._valor
+
+    def registrar(self, conta):
+        if conta.verificar_limite_transacoes():
+            print("\n❌ Operação falhou! Excedeu o limite máximo de 10 transações diárias.")
+            return False
+
+        if self.valor > 0:
+            conta._saldo += self.valor
+            conta.historico.adicionar_transacao("Depósito", self.valor)
+            print(f"\n✅ Depósito de R$ {self.valor:.2f} realizado com sucesso!")
+            return True
+        else:
+            print("\n❌ Operação falhou! O valor informado deve ser maior que zero.")
+            return False
+
+
+class Saque(Transacao):
+    def __init__(self, valor):
+        self._valor = valor
+
+    @property
+    def valor(self):
+        return self._valor
+
+    def registrar(self, conta):
+        if conta.verificar_limite_transacoes():
+            print("\n❌ Operação falhou! Excedeu o limite máximo de 10 transações diárias.")
+            return False
+
+        sucesso = conta.sacar(self.valor)
+        if sucesso:
+            conta.historico.adicionar_transacao("Saque", self.valor)
+        return sucesso
+
+
+class Conta:
+    def __init__(self, numero, cliente, tipo_conta="corrente", senha_hash="", limite=5000.0, saldo=0.0, numero_saques=0):
+        self._saldo = saldo
+        self._numero = numero
+        self._agencia = "0001"
+        self._cliente = cliente
+        self._historico = Historico()
+        self._tipo_conta = tipo_conta
+        self._senha_hash = senha_hash
+        self._limite = limite
+        self._numero_saques = numero_saques
+
+    @property
+    def saldo(self):
+        return self._saldo
+
+    @property
+    def numero(self):
+        return self._numero
+
+    @property
+    def agencia(self):
+        return self._agencia
+
+    @property
+    def cliente(self):
+        return self._cliente
+
+    @property
+    def historico(self):
+        return self._historico
+
+    @property
+    def tipo_conta(self):
+        return self._tipo_conta
+
+    @property
+    def senha_hash(self):
+        return self._senha_hash
+
+    @property
+    def limite(self):
+        return self._limite
+
+    @property
+    def numero_saques(self):
+        return self._numero_saques
+
+    def verificar_limite_transacoes(self):
+        hoje = datetime.now().strftime("%Y-%m-%d")
+        transacoes_hoje = [t for t in self.historico.transacoes if t["data_iso"].startswith(hoje)]
+        return len(transacoes_hoje) >= 10
+
+    @classmethod
+    def nova_conta(cls, cliente, numero, tipo_conta, senha, limite):
+        return cls(numero, cliente, tipo_conta=tipo_conta, senha_hash=criar_hash(senha), limite=limite)
+
+    def sacar(self, valor):
+        if valor > self._saldo:
+            print("\n❌ Operação falhou! Saldo insuficiente.")
+            return False
+        elif valor > self._limite:
+            print(f"\n❌ Operação falhou! O valor excede o limite máximo por saque de R$ {self._limite:.2f}.")
+            return False
+        elif self._numero_saques >= 5:
+            print("\n❌ Operação falhou! Número máximo de saques diários atingido.")
+            return False
+        elif valor > 0:
+            self._saldo -= valor
+            self._numero_saques += 1
+            print(f"\n✅ Saque de R$ {valor:.2f} realizado com sucesso!")
+            return True
+        else:
+            print("\n❌ Operação falhou! O valor informado é inválido.")
+            return False
+
+    def depositar(self, valor):
+        transacao = Deposito(valor)
+        return transacao.registrar(self)
+
+
+class ContaCorrente(Conta):
+    pass
+
+
+class ContaSalario(Conta):
+    pass
+
+
+class Cliente:
+    def __init__(self, endereco):
+        self.endereco = endereco
+        self.contas = []
+
+    def realizar_transacao(self, conta, transacao):
+        transacao.registrar(conta)
+
+    def adicionar_conta(self, conta):
+        self.contas.append(conta)
+
+
+class PessoaFisica(Cliente):
+    def __init__(self, nome, data_nascimento, cpf_hash, endereco):
+        super().__init__(endereco)
+        self.nome = nome
+        self.data_nascimento = data_nascimento
+        self.cpf_hash = cpf_hash
+
+
+def carregar_sistema():
+    """Carrega clientes e contas do ficheiro JSON e reconstrói os objetos."""
+    clientes = []
+    contas = []
+
+    if os.path.exists(ARQUIVO_DADOS):
+        try:
+            with open(ARQUIVO_DADOS, "r", encoding="utf-8") as arquivo:
+                dados = json.load(arquivo)
+                
+                # Carregar clientes
+                dic_clientes = {}
+                for c_data in dados.get("clientes", []):
+                    cli = PessoaFisica(
+                        nome=c_data["nome"],
+                        data_nascimento=c_data["data_nascimento"],
+                        cpf_hash=c_data["cpf_hash"],
+                        endereco=c_data["endereco"]
+                    )
+                    dic_clientes[c_data["cpf_hash"]] = cli
+                    clientes.append(cli)
+
+                # Carregar contas
+                for acc_data in dados.get("contas", []):
+                    cli = dic_clientes.get(acc_data["cpf_titular_hash"])
+                    if cli:
+                        conta = Conta(
+                            numero=acc_data["numero_conta"],
+                            cliente=cli,
+                            tipo_conta=acc_data["tipo_conta"],
+                            senha_hash=acc_data["senha_hash"],
+                            limite=acc_data["limite"],
+                            saldo=acc_data["saldo"],
+                            numero_saques=acc_data["numero_saques"]
+                        )
+                        # Restaurar histórico
+                        for t in acc_data.get("historico", []):
+                            conta.historico.transacoes.append(t)
+                        
+                        cli.adicionar_conta(conta)
+                        contas.append(conta)
+        except json.JSONDecodeError:
+            print("\n⚠️ Aviso: Ficheiro corrompido. A iniciar com base limpa.")
+            return [], []
+    return clientes, contas
+
+
+def salvar_sistema(clientes, contas):
+    """Salva o estado atual dos objetos em formato JSON estruturado."""
+    dados_clientes = []
+    for cli in clientes:
+        dados_clientes.append({
+            "nome": cli.nome,
+            "data_nascimento": cli.data_nascimento,
+            "cpf_hash": cli.cpf_hash,
+            "endereco": cli.endereco
+        })
+
+    dados_contas = []
+    for acc in contas:
+        dados_contas.append({
+            "agencia": acc.agencia,
+            "numero_conta": acc.numero,
+            "tipo_conta": acc.tipo_conta,
+            "cpf_titular_hash": acc.cliente.cpf_hash,
+            "senha_hash": acc.senha_hash,
+            "saldo": acc.saldo,
+            "limite": acc.limite,
+            "numero_saques": acc.numero_saques,
+            "historico": acc.historico.transacoes
+        })
+
+    dados = {
+        "clientes": dados_clientes,
+        "contas": dados_contas
+    }
+
+    with open(ARQUIVO_DADOS, "w", encoding="utf-8") as arquivo:
+        json.dump(dados, arquivo, ensure_ascii=False, indent=4)
+
+
+def criar_utilizador(clientes, contas):
     cpf_input = input("Informe o CPF do cliente (apenas números): ")
     cpf_limpo = "".join([c for c in cpf_input if c.isdigit()])
     
@@ -166,10 +301,10 @@ def criar_utilizador(utilizadores, contas):
     
     cpf_hash_novo = criar_hash(cpf_limpo)
 
-    for u in utilizadores:
-        if u["cpf_hash"] == cpf_hash_novo:
+    for c in clientes:
+        if c.cpf_hash == cpf_hash_novo:
             print("\n❌ Operação negada: Já existe um utilizador registado com este CPF!")
-            return u
+            return c
 
     nome = input("Informe o nome completo: ")
     data_nascimento = input("Informe a data de nascimento (dd-mm-aaaa): ")
@@ -180,25 +315,17 @@ def criar_utilizador(utilizadores, contas):
     cidade_estado = input("Informe a cidade/sigla estado (ex: Rio de Janeiro/RJ): ")
     endereco = f"{rua} - {bairro} - {cidade_estado}"
 
-    utilizador = {
-        "nome": nome, 
-        "data_nascimento": data_nascimento, 
-        "cpf_hash": cpf_hash_novo,
-        "endereco": endereco
-    }
-    utilizadores.append(utilizador)
-    salvar_dados(utilizadores, contas)
+    cliente = PessoaFisica(nome=nome, data_nascimento=data_nascimento, cpf_hash=cpf_hash_novo, endereco=endereco)
+    clientes.append(cliente)
+    salvar_sistema(clientes, contas)
     
     print(f"\n🎉 Utilizador cadastrado com sucesso!")
     print(f"🛡️ CPF Protegido (Hash): {formatar_e_mascarar_cpf(cpf_limpo)}")
-    return utilizador
+    return cliente
 
-def criar_nova_conta(utilizadores, contas, agencia):
-    """
-    Cria uma nova conta (Corrente ou Salário) vinculada a um utilizador existente,
-    definindo limites financeiros adequados para cada tipo.
-    """
-    if not utilizadores:
+
+def criar_nova_conta(clientes, contas):
+    if not clientes:
         print("\n❌ Nenhum utilizador cadastrado. Cadastre o utilizador primeiro (Opção 2).")
         return None
 
@@ -206,13 +333,13 @@ def criar_nova_conta(utilizadores, contas, agencia):
     cpf_limpo = "".join([c for c in cpf_input if c.isdigit()])
     cpf_hash_busca = criar_hash(cpf_limpo)
 
-    utilizador_encontrado = None
-    for u in utilizadores:
-        if u["cpf_hash"] == cpf_hash_busca:
-            utilizador_encontrado = u
+    cliente_encontrado = None
+    for c in clientes:
+        if c.cpf_hash == cpf_hash_busca:
+            cliente_encontrado = c
             break
 
-    if not utilizador_encontrado:
+    if not cliente_encontrado:
         print("\n❌ Utilizador não encontrado! Por favor, cadastre o utilizador primeiro.")
         return None
 
@@ -223,8 +350,6 @@ def criar_nova_conta(utilizadores, contas, agencia):
     
     tipo_conta = "salario" if tipo_opcao == "2" else "corrente"
     nome_tipo = "Conta Salário" if tipo_conta == "salario" else "Conta Corrente"
-    
-    # 🛡️ Correção: Atribui limites válidos para evitar o bloqueio indevido
     limite_conta = 5000.0 if tipo_conta == "corrente" else 2500.0
 
     while True:
@@ -234,35 +359,27 @@ def criar_nova_conta(utilizadores, contas, agencia):
         print("\n❌ A senha deve conter exatamente 4 números.")
 
     numero_conta = len(contas) + 1
-    conta = {
-        "agencia": agencia,
-        "numero_conta": numero_conta,
-        "tipo_conta": tipo_conta,
-        "cpf_titular_hash": cpf_hash_busca,
-        "senha_hash": criar_hash(senha),
-        "saldo": 0.0,
-        "limite": limite_conta, # Limite de saque por operação corrigido
-        "extrato": "",
-        "numero_saques": 0,
-        "historico_transacoes_datas": []
-    }
+    
+    if tipo_conta == "corrente":
+        conta = ContaCorrente.nova_conta(cliente_encontrado, numero_conta, tipo_conta, senha, limite_conta)
+    else:
+        conta = ContaSalario.nova_conta(cliente_encontrado, numero_conta, tipo_conta, senha, limite_conta)
+
+    cliente_encontrado.adicionar_conta(conta)
     contas.append(conta)
-    salvar_dados(utilizadores, contas)
+    salvar_sistema(clientes, contas)
 
     print(f"\n🎉 {nome_tipo} criada com sucesso!")
-    print(f"📄 Agência: {agencia} | Número da Conta: {numero_conta} | Limite por Saque: R$ {limite_conta:.2f}")
+    print(f"📄 Agência: 0001 | Número da Conta: {numero_conta} | Limite por Saque: R$ {limite_conta:.2f}")
     return conta
 
-def autenticar_usuario(contas, utilizadores):
-    """
-    Autenticação segura via hash de CPF e palavra-passe. 
-    Se o cliente tiver múltiplas contas, exibe um menu para escolher qual deseja aceder.
-    """
+
+def autenticar_usuario(clientes, contas):
     cpf_input = input("Informe o seu CPF para autenticação: ")
     cpf_limpo = "".join([c for c in cpf_input if c.isdigit()])
     cpf_hash_tentativa = criar_hash(cpf_limpo)
     
-    contas_do_usuario = [c for c in contas if c["cpf_titular_hash"] == cpf_hash_tentativa]
+    contas_do_usuario = [c for c in contas if c.cliente.cpf_hash == cpf_hash_tentativa]
     
     if not contas_do_usuario:
         print("\n❌ Acesso Negado: Nenhuma conta encontrada para este CPF.")
@@ -271,31 +388,27 @@ def autenticar_usuario(contas, utilizadores):
     senha_input = input("Informe a sua palavra-passe/PIN de 4 dígitos: ")
     senha_hash_tentativa = criar_hash(senha_input)
     
-    contas_validas = [c for c in contas_do_usuario if c["senha_hash"] == senha_hash_tentativa]
+    contas_validas = [c for c in contas_do_usuario if c.senha_hash == senha_hash_tentativa]
     
     if not contas_validas:
         print("\n❌ Acesso Negado: Palavra-passe incorreta.")
         return None
         
-    nome_titular = ""
-    for u in utilizadores:
-        if u["cpf_hash"] == cpf_hash_tentativa:
-            nome_titular = u["nome"]
-            break
+    nome_titular = contas_validas[0].cliente.nome
             
     if len(contas_validas) == 1:
         conta_encontrada = contas_validas[0]
-        tipo_nome = "Conta Salário" if conta_encontrada.get("tipo_conta") == "salario" else "Conta Corrente"
-        print(f"\n✨ Autenticação bem-sucedida! Bem-vindo(a), {nome_titular} ({tipo_nome} - C/C: {conta_encontrada['numero_conta']}).")
+        tipo_nome = "Conta Salário" if conta_encontrada.tipo_conta == "salario" else "Conta Corrente"
+        print(f"\n✨ Autenticação bem-sucedida! Bem-vindo(a), {nome_titular} ({tipo_nome} - C/C: {conta_encontrada.numero}).")
         return conta_encontrada
         
-    print(f"\n✨ Olá, {nome_titular}! Encontramos mais do que uma conta associada ao seu CPF[cite: 20].")
+    print(f"\n✨ Olá, {nome_titular}! Encontramos mais do que uma conta associada ao seu CPF.")
     print("=" * 50)
     print("Selecione qual conta deseja aceder:")
     
     for idx, conta in enumerate(contas_validas, start=1):
-        tipo_nome = "Conta Salário" if conta.get("tipo_conta") == "salario" else "Conta Corrente"
-        print(f"[{idx}]\t{tipo_nome} (Ag: {conta['agencia']} | C/C: {conta['numero_conta']} | Saldo: R$ {conta['saldo']:.2f})")
+        tipo_nome = "Conta Salário" if conta.tipo_conta == "salario" else "Conta Corrente"
+        print(f"[{idx}]\t{tipo_nome} (Ag: {conta.agencia} | C/C: {conta.numero} | Saldo: R$ {conta.saldo:.2f})")
         
     print("=" * 50)
     
@@ -305,22 +418,32 @@ def autenticar_usuario(contas, utilizadores):
             indice = int(escolha) - 1
             if 0 <= indice < len(contas_validas):
                 conta_escolhida = contas_validas[indice]
-                tipo_nome = "Conta Salário" if conta_escolhida.get("tipo_conta") == "salario" else "Conta Corrente"
-                print(f"\n✅ Acedendo à {tipo_nome} (C/C: {conta_escolhida['numero_conta']})...")
+                tipo_nome = "Conta Salário" if conta_escolhida.tipo_conta == "salario" else "Conta Corrente"
+                print(f"\n✅ Acedendo à {tipo_nome} (C/C: {conta_escolhida.numero})...")
                 return conta_escolhida
         print("❌ Opção inválida. Digite um número correspondente à lista.")
 
+
+def exibir_extrato(conta):
+    tipo_nome = "Conta Salário" if conta.tipo_conta == "salario" else "Conta Corrente"
+    print(f"\n================ EXTRATO ({tipo_nome}) ================")
+    if not conta.historico.transacoes:
+        print("Não foram realizadas movimentações.")
+    else:
+        for t in conta.historico.transacoes:
+            print(f"[{t['data_formatada']}] {t['tipo']}:\tR$ {t['valor']:.2f}")
+    print(f"\nSaldo atual:\tR$ {conta.saldo:.2f}")
+    print("======================================================")
+
+
 def main():
-    LIMITE_SAQUES = 5
-    AGENCIA = "0001"
-    
-    utilizadores, contas = carregar_dados()
+    clientes, contas = carregar_sistema()
 
     while True:
         menu_inicial = """
-        ================ ACESSO BANCÁRIO  ================
+        ================ ACESSO BANCÁRIO ================
         [1]\tAcessar à Conta
-        [2]\tCadastrar Novo Utilizador 
+        [2]\tCadastrar Novo Utilizador
         [3]\tCriar Nova Conta (Corrente ou Salário)
         [q]\tSair do Sistema
         => """
@@ -328,13 +451,13 @@ def main():
         opcao = input(menu_inicial).strip().lower()
 
         if opcao == "1":
-            conta_atual = autenticar_usuario(contas, utilizadores)
+            conta_atual = autenticar_usuario(clientes, contas)
             
             if conta_atual:
                 while True:
-                    tipo_nome = "Salário" if conta_atual.get("tipo_conta") == "salario" else "Corrente"
+                    tipo_nome = "Salário" if conta_atual.tipo_conta == "salario" else "Corrente"
                     menu_operacoes = f"""
-                    ================ MENU ({tipo_nome} - Ag: {conta_atual['agencia']} | C/C: {conta_atual['numero_conta']}) ================
+                    ================ MENU ({tipo_nome} - Ag: {conta_atual.agencia} | C/C: {conta_atual.numero}) ================
                     [d]\tDepositar
                     [s]\tSacar
                     [e]\tExtrato
@@ -345,18 +468,15 @@ def main():
 
                     if op_conta == "d":
                         valor = obter_valor_numerico("Informe o valor do depósito (R$): ")
-                        depositar(conta_atual, valor, utilizadores, contas)
+                        transacao = Deposito(valor)
+                        conta_atual.cliente.realizar_transacao(conta_atual, transacao)
+                        salvar_sistema(clientes, contas)
 
                     elif op_conta == "s":
                         valor = obter_valor_numerico("Informe o valor do saque (R$): ")
-                        sacar(
-                            conta=conta_atual,
-                            valor=valor,
-                            limite=conta_atual["limite"],
-                            limite_saques=LIMITE_SAQUES,
-                            utilizadores=utilizadores,
-                            contas=contas
-                        )
+                        transacao = Saque(valor)
+                        conta_atual.cliente.realizar_transacao(conta_atual, transacao)
+                        salvar_sistema(clientes, contas)
 
                     elif op_conta == "e":
                         exibir_extrato(conta_atual)
@@ -368,13 +488,13 @@ def main():
                         print("\n❌ Opção inválida, selecione novamente.")
 
         elif opcao == "2":
-            criar_utilizador(utilizadores, contas)
+            criar_utilizador(clientes, contas)
 
         elif opcao == "3":
-            criar_nova_conta(utilizadores, contas, AGENCIA)
+            criar_nova_conta(clientes, contas)
 
         elif opcao == "q":
-            print("\nObrigado por utilizar o nosso sistema bancário. Até logo!")
+            print("\nObrigado por utilizar o nosso banco. Até logo!")
             break
         else:
             print("\n❌ Opção inválida, selecione novamente.")
