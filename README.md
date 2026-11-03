@@ -1,6 +1,15 @@
-# Sistema Bancário em Python
+# Sistema Bancário em Python (Arquitetura POO) v.0.3
 
 Sistema bancário desenvolvido em Python com foco em boas práticas de programação.
+
+## 🚀 Evolução para POO: Por que fizemos esta mudança?
+
+Inicialmente estruturado de forma procedural (com funções e dicionários), o projeto foi totalmente refatorado para o modelo orientado a objetos seguindo rigorosamente o **diagrama UML** proposto pela DIO. Esta transição trouxe ganhos fundamentais:
+
+* **Conformidade Arquitetural (UML)**: Implementação correta de classes essenciais como `Cliente`, `PessoaFisica`, `Conta`, `ContaCorrente`, `ContaSalario`, `Historico`, `Transacao`, `Deposito` e `Saque`.
+* **Encapsulamento e Organização**: Cada entidade do sistema passou a gerir o seu próprio comportamento e dados (ex: o saldo, o histórico e as validações pertencem à classe `Conta`), eliminando variáveis globais e acoplamento excessivo.
+* **Herança e Polimorfismo**: Reaproveitamento de código inteligente através de classes-mãe (`Cliente` e `Conta`) e especializações (`ContaCorrente` e `ContaSalario`), tornando o sistema limpo e preparado para futuras expansões.
+* **Escalabilidade e Portfólio**: Eleva o nível técnico do projeto, demonstrando domínio de padrões de projeto robustos e de mercado.
 
 ## 🛡️ Principais Funcionalidades e Segurança
 
